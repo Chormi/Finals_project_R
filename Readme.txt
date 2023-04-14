@@ -10,3 +10,5 @@ b) "freeway crashes.csv" is the data to be used for the project. You must DOWNLO
 c)"Project_Dictionary for freeway crashes data.docx" is the dictionary for the columns of the table "freeway crashes"
 d) "project_final_1.pdf" is the pdf version of the project
 e)"index_html" is the website version of the project
+
+4. To run the code, you MUST DOWNLOAD "project_final_1.Rmd" AND "freeway crashes.csv". Make sure directory is set properly
