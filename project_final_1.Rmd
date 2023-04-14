@@ -1,0 +1,510 @@
+---
+title: "Analysis of Road Accidents to minimize future possibilities for Road mishaps"
+author: "Chormi Zimik Vashai and Pavan Kumar Rudrapogu"
+date: "4/14/2023"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<h4> Github link to our project: https://github.com/Chormi/Finals_project_R.git </h4><br>
+<h4> please read the Readme file in github to download the data </h4><br>
+
+<br>
+Michigan being the place of world’s leading producer of automobiles and weather conditions varying from snowing to windy to raining to clear skies, we are motivated to work on this project as the above factors will help audience understand the picture of road safety influence by machines and nature. Our project will target common people who commute daily on public transport of individual transport. 
+
+Travelling by Car is the least safe way to travel as compared to Flights, Boat, and Train. With our project we would like to learn, with our data, the reasons contributing to accidents. We would like to research the factors that play a key role and the factors that humans can control to reduce accidents. Our objective is to find study these data where number of factors such as time of accident, age of driver, road conditions etc are found.
+
+To be begin we first load the necessary packages. If they aren't installed yet, then you can simply install using the below code.
+
+- Install and load required packages
+```{r}
+#tinytex::install_tinytex()
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages("RColorBrewer")
+#install.packages("mice")
+library("dplyr")
+library("ggplot2")
+library("RColorBrewer")
+library("mice")
+```
+Our data is called freeway crashes.CSV. This is from  https://www.michigantrafficcrashfacts.org/. Michigan State police share raw crashes with WMU Transportation Research Centre for Livable Communities.
+Our data contains all possible factors and details of recorded crashes. The data includes environmental factors, roadways, vehicle types, human factors, weather conditions etc. This will be important for us in analyzing accident data. Our data has 400,000 entries with 30 columns. BUt of course, we will be cleaning the data i.e. fix missing values or anomalies by imputing,deleting etc
+```{r}
+my_data <- read.csv("freeway crashes.CSV", stringsAsFactors = FALSE)
+```
+
+<h3>1. Data cleansing/Wrangling:</h3><br> 
+Our data has some columns that aren't required for analysis e.g Crash ID of the accident, Private ID given to the driver etc. Hence we have removed them in the first place.ALso the alcohol and Drug use column has been combined into one table using OR logic.
+
+```{r}
+#removing columns that aren't required
+new_data<-my_data[-c(2:9,12,13,10,19,20,21,22,24,25,26)]
+
+#joiining alc and drug use column into one column called alc_drug
+new_data$alc_drug <- ifelse(new_data$alch_susp_ind | new_data$drug_susp_ind, 1, 0)
+
+#deleting alc and drug column
+new_data<-new_data[-c(9,10)]
+
+View(new_data)
+```
+
+Looking at the data, we find that 2013 has missing "prty_age", which is the age of the driver. TO decide whether to should omit 2013 data from our analysis or impute the data, we do the following analysis first.
+<br>
+</h3>1a. Mean Imputation</h3><br>
+```{r}
+mean_data<-new_data
+mean_age <- mean(mean_data$prty_age, na.rm = TRUE)
+mean_data$prty_age <- ifelse(is.na(mean_data$prty_age), mean_age, mean_data$prty_age)
+
+ggplot(mean_data, aes(x = prty_age)) +
+  geom_histogram(binwidth = 5, fill = "lightgreen") +
+  labs(title = "Distribution of Driver Age in Accidents (2010-2017)",
+       x = "Age",
+       y = "Count")
+# Notice the huge count in age around 38 years, which is due to mean imputing. We won't be using this as this add only one fixed value to the missing values and dilutes the quality of our data.
+```
+
+
+<h3>1b. Median Imputation</h3><br>
+```{r}
+median_data<-new_data
+median_age <- median(median_data$prty_age, na.rm = TRUE)
+median_data$prty_age <- ifelse(is.na(median_data$prty_age), median_age, median_data$prty_age)
+
+ggplot(median_data, aes(x = prty_age)) +
+  geom_histogram(binwidth = 5, fill = "lightgreen") +
+  labs(title = "Distribution of Driver Age in Accidents (2010-2017)",
+       x = "Age",
+       y = "Count")
+# Notice the huge count in age around 38 years, which is due to median imputing. We won't be using this as this add only one fixed value to the missing values and dilutes the quality of our data
+```
+
+<h3>1c. Multiple impute using Regression method</h3><br>
+```{r}
+regress_data <- mice(new_data, m = 5, method = "norm.predict") # *THIS WILL TAKE A COUPLE OF MINUTES TO LOAD SO ONLY DO IF YOU HAVE TIME*
+# combine the imputed data sets
+regress_data <- complete(regress_data, action = "long")
+
+ggplot(regress_data, aes(x = prty_age)) +
+  geom_histogram(binwidth = 5, fill = "lightgreen") +
+  labs(title = "Distribution of Driver Age in Accidents (2010-2017)",
+       x = "Age",
+       y = "Count")
+
+#Mean and median give 38.00 years for all 
+#Regression give 35 to 40. 
+```
+<br>
+Hence we have decided to omit 2013 data to keep the integrity of the data for other years. We perform data cleansing on our data now
+<br>
+```{r}
+NA_data<-new_data # data with NA values stored just in case we might need it in the future
+new_data<-na.omit(new_data)
+#There are some entries "UNK" in milt_time. We have to remove them too
+new_data <- subset(new_data, milt_time != "UNK")
+```
+
+Upon inspection we learn that time(milt_time) is character, not numeric . hence we have to change to numeric
+```{r}
+class(new_data$milt_time)
+is.numeric(new_data$milt_time)
+new_data$milt_time <- as.numeric(new_data$milt_time)
+new_data<-na.omit(new_data) # removing na values where it was coerced to NA for alphabets value
+View(new_data)
+
+```
+
+<h3>2. Data Exploration</h3><br>
+Now that we are done with data cleansing, we move to data exploration. Here we check our data. We try to answer our initial questions. We find which year has the most accidents or how many were alcohol/drug related accidents etc.<br>
+<h4>2a. Checking which year has the highest accidents</h4><br>
+```{r}
+# group accidents by year and count the number of accidents in each year
+year_counts <- new_data %>% 
+                group_by(year) %>% 
+                summarise(accident_count = n())
+
+# sort the years by the number of accidents in descending order
+year_counts <- year_counts[order(-year_counts$accident_count),]
+
+# print the year with the highest number of accidents
+cat("The year with the highest number of accidents is", year_counts$year[1], "with", year_counts$accident_count[1], "accidents.")
+```
+
+<h4>2b. Checking which age group has highest accidents</h4><br>
+```{r}
+# create age groups based on the age column
+new_data <- new_data %>%
+  mutate(age_group = cut(prty_age, breaks = c(0, 15, 30, 45, 61, Inf), 
+                         labels = c("0-15", "16-30", "31-45", "46-60","61+")))
+
+# group accidents by age group and count the number of accidents in each group
+age_counts <- new_data %>% group_by(age_group) %>% summarise(accident_count = n())
+
+# sort the age groups by the number of accidents in descending order
+age_counts <- age_counts[order(-age_counts$accident_count),]
+
+# print the age group with the highest number of accidents
+cat("The age group with the highest number of accidents is", age_counts$age_group[1], "with", age_counts$accident_count[1], "accidents.")
+```
+
+<h4>2c.Data with fatal accidents only</h4><br>
+```{r}
+fatal_accidents <- new_data %>%
+        filter(injy_svty_cd == "1")
+#View(fatal_accidents)
+```
+
+<h4>2d. Finding which year has the most fatal accidents</h4><br>
+```{r}
+
+fatal_by_year <- fatal_accidents %>%
+  group_by(year) %>%
+  summarize(num_fatal = n())
+
+# Find the year with the most fatal accidents
+most_fatal_year <- fatal_by_year %>%
+  filter(num_fatal == max(num_fatal))
+
+print(most_fatal_year)
+```
+
+<h4>2e. How many percentage of accidents happen in Clear weather(Value =1) and dry road conditions(value=1)</h4><br>
+```{r}
+
+total_accidents <- nrow(new_data)
+clear_wthr_crash <- sum(new_data$wthr_cd == 1, na.rm = TRUE)
+percent_clear_wthr_crash <- 100 * clear_wthr_crash / total_accidents
+print(percent_clear_wthr_crash)# 49%
+
+clear_rd_crash<-sum(new_data$rd_cond_cd == 1, na.rm = TRUE)
+percent_clear_rd_crash <- 100 * clear_rd_crash / total_accidents
+print(percent_clear_rd_crash) # 62%
+```
+
+<h4>2f. How many percentage were under alc or drug influence.</h4><br>
+```{r}
+alc_drug_crash<-sum(new_data$alc_drug == 1, na.rm = TRUE)
+percent_alc_drug_crash <- 100 * alc_drug_crash / total_accidents
+print(percent_alc_drug_crash) # 1.9%%
+```
+
+<h4>2g. How severe were alc_drug accidents</h4><br>
+```{r}
+alc_drug_data_fatal <- subset(new_data, injy_svty_cd == 1)
+total_alc_drug_accidents <- nrow(alc_drug_data_fatal)
+alc_drug_crash_fatal<-sum(alc_drug_data_fatal$alc_drug == 1, na.rm = TRUE)
+percent_alc_drug_crash_fatal <- 100 * alc_drug_crash_fatal / total_alc_drug_accidents
+print(percent_alc_drug_crash_fatal) #31% of alc_drug accidents are fatal
+```
+
+<h4>2h. How severe were other accidents without alc_drug</h4><br>
+```{r}
+accidents_wo_alc_drug <- new_data %>%
+  filter(alc_drug == 0)
+
+count_wo_alc_drug<-nrow(accidents_wo_alc_drug)
+wo_alc_drug_crash_fatal<-sum(accidents_wo_alc_drug$injy_svty_cd == 1, na.rm = TRUE)
+percent_wo_alc_drug_crash_fatal <- 100 * wo_alc_drug_crash_fatal / count_wo_alc_drug
+print(percent_wo_alc_drug_crash_fatal) #0.1% of total accidents are fatal without alc_drug
+```
+It is important to note that 31% of alcohol/drug related accidents are fatal while only 0.1% of accidents without drug or alcohol related are fatal. 
+
+Now that we have extracted some information about our data and have learned some insights, we now more to the visual part of our data. Visualization gives us an understanding of our data in pictorial form. It allows us to see a bigger pattern of the data. We will plot graphs, scatterplot and heatmap to see how our data is.
+
+<h3>3 Data Visualisation Part 1 </h3><br>
+```{r}
+ggplot(new_data, aes(x = spd_limt)) +
+  geom_histogram(binwidth = 5, fill = "steelblue") +
+  labs(title = "Distribution of SPeed in Accidents (2010-2017)",
+       x = "Speed",
+       y = "Count")
+```
+<br>From this graph, we learn most accidents happen at speed limit around 70. There are some too at 50 to 60 too. 
+<br>
+<h4>3a. Check distribution of Age</h4><br>
+```{r}
+
+ggplot(new_data, aes(x = prty_age)) +
+  geom_histogram(binwidth = 5, fill = "steelblue") +
+  labs(title = "Distribution of Driver Age in Accidents (2010-2017)",
+       x = "Age",
+       y = "Count")
+```
+<br>This graph shows us the pattern of age with respect to accidents. Around 18-28 years old has most accidents. After that the number of accidents tend to decrease as the age starts increasing.
+
+<br><h4>3c checking trends on accidents by year</h4><br>
+```{r}
+
+ggplot(NA_data, aes(x = year)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Number of Accidents by Year (2010-2017)",
+       x = "Year",
+       y = "Number of Accidents") 
+#we use 2013 data too just to see the pattern
+```
+<br>This graph shows us the number of accidents over 7 years(2010 to 2017). The number of accidents tend to increase over the years but by a small percentage.
+<h4> 3d. Alcohol and drug related accidents over the years</h4><br>
+```{r}
+
+alc_dru_data<-subset(NA_data,alc_drug==1)
+ggplot(alc_dru_data, aes(x = year)) +
+  geom_bar(fill = "steelblue") +
+  labs(title = "Number of Accidents by Year (2010-2017) related to alcohol/drug",
+       x = "Year",
+       y = "Number of Accidents due to alc/drug")
+```
+<br>Alcohol and drug related accidents tend to be uniform throughout the year.
+<br>
+<h4>3e Most accident occurrence by time</h4></br>
+```{r}
+ggplot(new_data, aes(x = milt_time)) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Time of accident (hour)", y = "Count", title = "time of accident")
+```
+<br>The above graph shows that there are high number of accidents around 8am and 8pm.
+
+<br><h4>3f. Checking road accidents by road condition</h4></br>
+```{r}
+ggplot(new_data, aes(x = rd_cond_cd)) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "road condition", y = "Count", title = "Accident at various road conditions")
+```
+<br>This graph shows the number of accidents on various road conditions. The road conditions are numbered from 1 to 8.
+1 Dry 
+2 Wet 
+3 Icy 
+4 Snowy 
+5 Muddy 
+6 Slushy 
+7 Covered with debris 
+8 Other/unknown
+
+The graph shows that bad road conditions don't necessarily contribute to accidents. Most accidents occur at ideal (dry) road condition.This explains that people tend to do driver more careful at bad road conditions.<br>
+<h4>3g. Accident at various Weather conditions</h4><b4>
+```{r}
+ggplot(new_data, aes(x = wthr_cd)) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Weather condition", y = "Count", title = "Accident at various Weather conditions")
+```
+<br>Clear day(1) has high chances of accident, just like in ideal road condition. cloudy(2),rain(4) and snow(5) together contribute nearly as equal to clear sky accidents.
+<h4>3h. Accident at various light conditions</h4><b4>
+```{r}
+#3h Accident at various light conditions
+ggplot(new_data, aes(x = lit_cd)) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Light condition", y = "Count", title = "Accident at various light conditions")
+```
+<br>Daylight(1) accidents has most occurence. Dark without strretlight(5) has more accidents than dark with streetlight(4)
+<h4>3i Accident at various injury severity</h4><b4>
+```{r}
+#3i Accident at various injury severity
+ggplot(new_data, aes(x = injy_svty_cd )) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Injy_svty", y = "Count", title = "Accident at various injury severity")
+```
+ <br>Most accidents are not fatal, though few are incapacitating(2) and non-incapacitating(3)
+```{r}
+ggplot(new_data, aes(x = num_lns )) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Injy_svty", y = "Count", title = "Accident at various lanes")
+```
+
+```{r}
+ggplot(new_data, aes(x = traffic_volume )) +
+  geom_bar(fill = "steelblue") +
+  labs(x = "Injy_svty", y = "Count", title = "Accident at various traffic volumes")
+```
+
+<br>Now we try to explore alcohol/drug related accidents by adding to speed limit accidents.
+```{r}
+# Grouping the accidents data by speed limit and alcohol/Drug use
+speed_alcohol <- new_data %>%
+  group_by(spd_limt, alc_drug) %>%
+  summarize(count = n())
+
+# Create a stacked bar chart
+ggplot(speed_alcohol, aes(x = spd_limt, y = count, fill = factor(alc_drug))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Accidents by Speed Limit and Alcohol/Drug Use",
+       x = "Speed Limit", y = "Count") +
+  scale_fill_manual(name = "Alcohol/Drug Use Detected", 
+                    values = c("blue", "red"),
+                    labels = c("No", "Yes")) 
+```
+<br>Speed limit 70 has a lot of accidents related to both with and without alcohol/drug related accidents.
+
+
+<h3>3 Data Visualisation Part 2</h3><br>
+<h4>3.a</h4> We now plot a scatterplot between time of accident and age of driver with alcohol/drug related accidents taken into account.
+```{r}
+ggplot(new_data, aes(x = milt_time, y = prty_age, color = alc_drug)) +
+  geom_point(alpha = 0.6) +
+  scale_color_gradient(low = "steelblue", high = "firebrick") +
+  labs(x = "Time of accident", y = "Age of driver", title = "Relationship between time of accident and age of driver")
+```
+<br>Looking at the scatterplot, we find that Alc_drug accidents seem to happen more between 8pm to 3 am as shown by the red dots. Also more age groups tend to travel between 10 am to 3 pm(camel-like hump in the middle of the plot)
+
+<h4>3.b</h4> We plot another scatter plot of traffic volume by age of driver, colored by alc_drug use.
+```{r}
+ggplot(new_data, aes(x = prty_age, y = traffic_volume, color = factor(alc_drug))) +
+  geom_point(alpha = 0.6) +
+  labs(x = "Age of driver", y = "Traffic volume", title = "Traffic volume by age of driver") +
+  scale_color_manual(values = c("steelblue", "firebrick"), labels = c("No", "Yes")) #low traffic volume and low age more accidents, alcohol not reqd
+
+```
+<br>This confirms that alcohol/drug related accidents happen more in lower age groups(notice that most red dots lie around 18 to 40).
+Also accidents occur more in less traffic area. Higher traffic volumes tend to have less accidents as compared to lower traffic volume.
+
+<h4>3.c Scatter plot of traffic volume by injury severity with alc/drug usage taken into account</h4><br>
+```{r}
+ggplot(new_data, aes(x = injy_svty_cd, y = traffic_volume, color = factor(alc_drug))) +
+  geom_point(alpha = 0.6) +
+  labs(x = "Injury severity", y = "Traffic volume", title = "Traffic volume by injy severity") +
+  scale_color_manual(values = c("steelblue", "firebrick"), labels = c("No", "Yes"))
+```
+ <br>The above scatterplot shows that alcohol/drug accidents are usually related to high injury severity(1 is fatal)(notice the intensity of red dot of 1 as copared to 2,3,4 and 5)<br>
+
+<h3>3 Data Visualisation Part 3</h3><br>
+For our last part of data visualisation, we will apply heatmaps on Road and Weather condition and Road and Light conditions.
+
+<h4>3.a Heatmap of Accidents by Road and Weather Condition</h4><br>
+```{r}
+#Group the data by road condition and weather condition, and count the number of accidents in each group
+accidents_grouped <- new_data %>% 
+  group_by(rd_cond_cd, wthr_cd) %>% 
+  summarise(count = n()) %>% 
+  ungroup()
+
+# Create a heatmap
+ggplot(accidents_grouped, aes(x = rd_cond_cd, y = wthr_cd, fill = count)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = brewer.pal(9, "YlOrRd"), na.value = "firebrick") +
+  labs(x = "Road Condition", y = "Weather Condition", title = "Accidents by Road and Weather Condition") +  
+  theme(axis.title = element_text(size = 14), axis.text = element_text(size = 12))
+```
+<br>This heatmap shows that accident occur the most at good weather and good road conditions. Notice the intense red at low value of both.
+
+<h4>3.b Heatmap of Accidents by Road and light Condition</h4><br>
+```{r}
+accidents_grouped <- new_data %>% 
+  group_by(rd_cond_cd, lit_cd) %>% 
+  summarise(count = n()) %>% 
+  ungroup()
+
+# Create a heatmap
+ggplot(accidents_grouped, aes(x = rd_cond_cd, y = lit_cd, fill = count)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = brewer.pal(9, "YlOrRd"), na.value = "firebrick") +
+  labs(x = "Road Condition", y = "light Condition", title = "Accidents by Road and light Condition") +
+  theme(axis.title = element_text(size = 14), axis.text = element_text(size = 12))
+```
+<br>This heatmap shows that accident occur the most at good light and good road conditions. Notice the dark red at low value.<br>
+
+
+<h3>4 Machine Learning:</h3><br> 
+For the last part of our project, we will apply machine learning. We will develop an algorithm by training 80% of our dataset. Then predict using the rest of the data. Then we will our algorithm accuracy, Confidence interval and other parameters.
+```{r}
+library(ggplot2)
+#install.packages("ggcorrplot")
+library(ggcorrplot)
+#install.packages("FactoMineR")
+library("FactoMineR")
+
+#*#Make sure all the below libraries are up to date.
+#*If you aren't sure then 'Remove' and 'Install' again
+#*Remove by using "remove.packages("name_of_library")""
+#*Install by using "install.packages("name_of_library")"
+
+
+#install.packages('caret')
+#install.packages('lattice')
+library(rlang)
+library(lattice)
+library(caret)
+library(MASS)
+#remove.packages("vctrs")
+#install.packages("rlang")
+#remove.packages("vctrs")
+#install.packages("vctrs")
+#remove.packages("tibble")
+#install.packages("tibble")
+```
+<h4>4.b Loading data and getting some hindsight</h4><br>
+```{r}
+accident_data<-new_data[,c(1:11)] #Removing the last three columns which was created from previous Data wrangling
+#summary
+
+head(accident_data)
+
+summary(accident_data)
+str(accident_data)
+
+#View(accident_data)
+```
+
+<h4>4.c</h4><br> We now prepare our data for ML by doing Data normalization and scaling. For our data we use injury severity level(injy_svty_cd) as our dependent variable. We also Plot the correlation matrix of each variables.
+```{r}
+# year is removed
+data_for_normalization<-accident_data[,c(2:8,10:11)]
+
+#importing Severity injury condition into "severity"
+severity<-c(accident_data$injy_svty_cd)
+
+data_normalized<-scale(data_for_normalization)
+data_normalized_df <- as.data.frame(data_normalized)
+
+df<-data.frame(data_normalized_df,severity)
+#df1<-data.frame(data_normalized_df,severity)
+
+corr_matrix <- cor(df)
+
+
+#correlation matrix
+ggcorrplot(corr_matrix)
+
+```
+The correlation matrix shows that age is un-correlated(white and blue cubes only). The other variables have correlation (Red cubes or little shade of red)
+
+<h4>4.d</h4><br> We now create a new categorical column based on the severity column. The values of severity as given by data are numeric. 1 being fatal, 2 being critical and so on. We have converted them into words
+```{r}
+df$severity <- ifelse(df$severity == 1, "fatal", 
+                      ifelse(df$severity == 2, "critical", 
+                             ifelse(df$severity == 3, "severe",
+                                    ifelse(df$severity == 4, "moderate", "minor"))))
+
+df$severity<-as.factor(df$severity)
+top_df <- as.data.frame(df)
+```
+
+<h4>4.e</h4><br> We use ORDINAL LOGISTIC REGRESSION MODEL for our ML algorithm. Our dependent variable is Ordinal (rank based on scale, from high to low). 'polr' is the function for OLR. We also remove age(prty_age) from our model because it shows no correlation(as per our above corr matrix). Lastly we use confusion matrix to see our model
+```{r}
+set.seed(123)
+train_indices<-sample(nrow(top_df),0.8*nrow(top_df)) #80% of data is used for training
+train_data<-top_df[train_indices,]
+test_data<-top_df[-train_indices,]
+
+model <- polr(severity ~ wthr_cd +  lit_cd + num_lns + spd_limt + rd_cond_cd + alc_drug + traffic_volume , data = train_data)
+# age removed since no correlation
+test_preds <- predict(model, newdata = test_data, type = "class")
+#type=class since classifctation algo
+
+
+confusionMatrix(test_preds, test_data$severity)
+```
+
+The confusion matrix shows us many important information. Our algorithm has accuracy of 87.03%. The confidence interval is 95% 
+
+
+<h3>5.Conclusion:</h3><br>
+We have successfully carried out our in depth analysis of the data. This has allowed us to understand accidents in Michigan. With factors such as road conditions, weather conditions etc playing a role in accidents. We have also understood about most accidents which happen to occur most in particular time of the day. The age of the driver also plays an important role along with the use of alcohol and drugs contributing to 31 % fatal accidents.<br>
+We have also use ML on our project although it could be furthur extended to other ML techniques too.<br>
+
+For our future work we will like to use the algorithm on user specified conditions and predict the likelihood of an accident. We can also work on Ensemble technique by using more ML techniques such as Linear regression, Clustering,K-Nearest Neighbors (KNN) etc.
